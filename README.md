@@ -193,7 +193,294 @@ $stmt->execute([
 ---
 
 #### ИТОГОВЫЙ ЧЕК-ЛИСТ (Сдать преподавателю)
+
 1.  [ ] При входе в `login.php` роль сохраняется в сессию.
 2.  [ ] Файл `check_admin.php` создан и работает.
 3.  [ ] Страница `admin_panel.php` не открывается без авторизации под админом.
 4.  [ ] В `register.php` роль `'client'` прописана жестко в коде.
+
+# Вторая пара
+
+Это методическое руководство предназначено для второго семинара 22 января. Оно логически продолжает тему авторизации и переходит к созданию контента. Материал адаптирован для студентов, которым сложно писать код «с нуля», и содержит готовые шаблоны.
+
+---
+
+### МЕТОДИЧЕСКОЕ РУКОВОДСТВО К СЕМИНАРУ №2
+**Дисциплина:** МДК.09.01 Проектирование и разработка веб-приложений
+**Тема:** Создание основной сущности проекта (Товары, Услуги, Заявки)
+**Дата:** 22 января 2026 г.
+**Время:** 16:50 – 18:20
+
+---
+
+#### ВВЕДЕНИЕ: ЧТО МЫ СТРОИМ?
+На прошлом занятии мы научились пускать пользователей на сайт. Теперь нужно сделать так, чтобы на сайте было **что смотреть** и **что покупать**.
+
+В программировании это называется **CRUD**:
+*   **C**reate (Создать) — сегодня делаем.
+*   **R**ead (Прочитать/Показать) — сегодня делаем.
+*   **U**pdate (Обновить) — позже.
+*   **D**elete (Удалить) — позже.
+
+Ваша задача: создать таблицу в базе данных для вашей темы (например, «Товары») и научить сайт сохранять туда данные и выводить их на экран.
+
+---
+
+#### ЭТАП 1. ПРОЕКТИРОВАНИЕ БАЗЫ ДАННЫХ (20 минут)
+
+Мы не можем сохранять данные в пустоту. Нужна таблица.
+
+1.  Зайдите в **Beget** -> **MySQL** -> **phpMyAdmin**.
+2.  Выберите свою базу данных (слева).
+3.  Перейдите на вкладку **SQL**.
+4.  Скопируйте код ниже, **изменив его под свою тему**, и нажмите «Вперед».
+
+**Шаблон SQL-кода (на примере Интернет-магазина):**
+
+```sql
+CREATE TABLE `products` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `title` VARCHAR(255) NOT NULL COMMENT 'Название товара',
+  `description` TEXT COMMENT 'Описание',
+  `price` DECIMAL(10, 2) NOT NULL COMMENT 'Цена (рубли.копейки)',
+  `image_url` VARCHAR(255) DEFAULT NULL COMMENT 'Ссылка на картинку',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+**Как адаптировать под вашу тему?**
+*   **Если у вас Блог:** Замените `products` на `posts`, `price` удалите, добавьте `content` (TEXT).
+*   **Если у вас Заявки (HelpDesk):** Замените `products` на `tickets`, добавьте `status` (VARCHAR).
+*   **Если у вас Библиотека:** Замените `products` на `books`, добавьте `author` (VARCHAR).
+
+---
+
+#### ЭТАП 2. СОЗДАНИЕ СТРАНИЦЫ ДОБАВЛЕНИЯ (Create)
+**Цель:** Сделать форму, через которую Админ добавляет новые записи.
+
+1.  Создайте файл **`add_item.php`**.
+2.  Вставьте код. Обратите внимание: мы используем `check_admin.php`, который вы сделали на прошлой паре, чтобы никто чужой не мог добавлять товары.
+
+**Код `add_item.php`:**
+
+```php
+<?php
+// 1. Подключаем БД и проверку на админа
+require 'db.php';
+require 'check_admin.php'; // Эту страницу видит только админ!
+
+$message = '';
+
+// 2. Если нажата кнопка "Сохранить"
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $title = trim($_POST['title']);
+    $price = $_POST['price'];
+    $desc  = trim($_POST['description']);
+    $img   = trim($_POST['image_url']);
+
+    if (empty($title) || empty($price)) {
+        $message = '<div class="alert alert-danger">Заполните название и цену!</div>';
+    } else {
+        // 3. Сохраняем в Базу Данных
+        $sql = "INSERT INTO products (title, description, price, image_url) VALUES (:t, :d, :p, :i)";
+        $stmt = $pdo->prepare($sql);
+        
+        try {
+            $stmt->execute([
+                ':t' => $title,
+                ':d' => $desc,
+                ':p' => $price,
+                ':i' => $img
+            ]);
+            $message = '<div class="alert alert-success">Товар успешно добавлен!</div>';
+        } catch (PDOException $e) {
+            $message = '<div class="alert alert-danger">Ошибка БД: ' . $e->getMessage() . '</div>';
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Добавить товар</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+    <div class="container">
+        <h1>Добавление нового товара</h1>
+        <a href="index.php" class="btn btn-secondary mb-3">← На главную</a>
+        
+        <?= $message ?>
+
+        <form method="POST" class="card p-4 shadow-sm">
+            <div class="mb-3">
+                <label>Название товара:</label>
+                <input type="text" name="title" class="form-control" required>
+            </div>
+            
+            <div class="mb-3">
+                <label>Цена (руб):</label>
+                <input type="number" name="price" class="form-control" step="0.01" required>
+            </div>
+
+            <div class="mb-3">
+                <label>Ссылка на картинку (URL):</label>
+                <input type="text" name="image_url" class="form-control" placeholder="https://...">
+                <small class="text-muted">Пока просто вставьте ссылку на картинку из интернета</small>
+            </div>
+
+            <div class="mb-3">
+                <label>Описание:</label>
+                <textarea name="description" class="form-control" rows="3"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-success">Сохранить в БД</button>
+        </form>
+    </div>
+</body>
+</html>
+```
+
+---
+
+#### ЭТАП 3. ВЫВОД СПИСКА НА ГЛАВНОЙ (Read)
+**Цель:** Чтобы любой пользователь (даже гость) мог видеть список товаров.
+
+1.  Откройте (или создайте) файл **`index.php`**.
+2.  Замените его содержимое на код ниже. Этот код берет данные из БД и строит красивые карточки.
+
+**Код `index.php`:**
+
+```php
+<?php
+session_start();
+require 'db.php';
+
+// 1. Получаем все товары из базы
+// ORDER BY id DESC означает "сначала новые"
+$stmt = $pdo->query("SELECT * FROM products ORDER BY id DESC");
+$products = $stmt->fetchAll();
+?>
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Главная страница</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+
+<!-- Навигация -->
+<nav class="navbar navbar-light bg-light px-4 mb-4 shadow-sm">
+    <span class="navbar-brand mb-0 h1">Мой Магазин</span>
+    <div>
+        <?php if (isset($_SESSION['user_id'])): ?>
+            <!-- Если вошел -->
+            <span class="me-3">Привет!</span>
+            <?php if ($_SESSION['user_role'] === 'admin'): ?>
+                <a href="admin_panel.php" class="btn btn-outline-danger btn-sm">Админка</a>
+                <a href="add_item.php" class="btn btn-success btn-sm">+ Добавить товар</a>
+            <?php endif; ?>
+            <a href="logout.php" class="btn btn-dark btn-sm">Выйти</a>
+        <?php else: ?>
+            <!-- Если гость -->
+            <a href="login.php" class="btn btn-primary btn-sm">Войти</a>
+            <a href="register.php" class="btn btn-outline-primary btn-sm">Регистрация</a>
+        <?php endif; ?>
+    </div>
+</nav>
+
+<div class="container">
+    <h2 class="mb-4">Каталог товаров</h2>
+    
+    <div class="row">
+        <?php foreach ($products as $product): ?>
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <!-- Если картинки нет, ставим заглушку -->
+                    <?php $img = $product['image_url'] ?: 'https://via.placeholder.com/300'; ?>
+                    <img src="<?= htmlspecialchars($img) ?>" class="card-img-top" alt="Фото" style="height: 200px; object-fit: cover;">
+                    
+                    <div class="card-body">
+                        <h5 class="card-title"><?= htmlspecialchars($product['title']) ?></h5>
+                        <p class="card-text text-truncate"><?= htmlspecialchars($product['description']) ?></p>
+                        <p class="card-text fw-bold text-primary"><?= $product['price'] ?> ₽</p>
+                    </div>
+                    <div class="card-footer bg-white border-top-0">
+                        <a href="#" class="btn btn-primary w-100">Купить</a>
+                    </div>
+                </div>
+            </div>
+        <?php endforeach; ?>
+        
+        <?php if (count($products) === 0): ?>
+            <p class="text-muted">Товаров пока нет. Зайдите под админом и добавьте их.</p>
+        <?php endif; ?>
+    </div>
+</div>
+
+</body>
+</html>
+```
+
+---
+
+#### ЭТАП 4. ПРОВЕРКА РАБОТЫ (Тестирование)
+
+1.  **Вход Админом:** Зайдите на сайт под логином администратора (которого создавали вчера).
+2.  **Добавление:** Нажмите кнопку «+ Добавить товар» (она должна появиться вверху).
+3.  **Заполнение:** Введите название (например, «Ноутбук»), цену и ссылку на любую картинку из Google Картинки (ПКМ -> Копировать URL картинки). Нажмите «Сохранить».
+4.  **Результат:** Вернитесь на «Главную». Вы должны увидеть красивую карточку с вашим товаром.
+5.  **Проверка Гостем:** Нажмите «Выйти». Кнопка «Добавить товар» должна исчезнуть, но сам список товаров должен остаться видимым.
+
+---
+
+#### ЧАСТЫЕ ОШИБКИ
+1.  **Ошибка:** `SQLSTATE[42S02]: Base table or view not found`.
+    *   *Решение:* Вы забыли создать таблицу в phpMyAdmin или назвали её не так, как в коде (например, в коде `products`, а в базе `tovary`).
+2.  **Ошибка:** Кнопка «Добавить товар» не появляется.
+    *   *Решение:* Проверьте, что вы вошли именно под пользователем, у которого в базе в поле `role` написано `admin`.
+3.  **Картинка не грузится (битая иконка).**
+    *   *Решение:* Вы вставили ссылку не на саму картинку (должна заканчиваться на .jpg/.png), а на сайт с картинкой.
+  
+
+## итоговый чек-лист для второго семинара (МДК.09.01). Его можно распечатать студентам или вывести на экран в конце пары, чтобы они могли самостоятельно проверить свою работу перед сдачей.
+
+---
+
+### ИТОГОВЫЙ ЧЕК-ЛИСТ (СЕМИНАР №2)
+**Тема:** Реализация каталога и добавления товаров
+**Критерий успеха:** На сайте работает полный цикл «Добавление -> Сохранение -> Отображение».
+
+#### 1. База данных (phpMyAdmin)
+- [ ] Создана таблица основной сущности (например, `products`, `books` или `tickets`).
+- [ ] В таблице есть первичный ключ `id` с настройкой **AUTO_INCREMENT**.
+- [ ] Типы данных выбраны логично (цена — это число/decimal, описание — text, название — varchar).
+
+#### 2. Добавление данных (add_item.php)
+- [ ] В начале файла подключен скрипт защиты `require 'check_admin.php'`.
+- [ ] Если зайти на страницу `add_item.php` **без авторизации** (в режиме инкогнито), происходит редирект на вход или ошибка доступа.
+- [ ] Форма отправляет данные методом **POST**.
+- [ ] После нажатия кнопки «Сохранить» появляется зеленое сообщение «Успешно добавлено».
+- [ ] Новая запись физически появляется в таблице в phpMyAdmin.
+
+#### 3. Главная страница (index.php)
+- [ ] Товары (или другие сущности) выводятся из базы данных, а не прописаны вручную в HTML.
+- [ ] Используется цикл `foreach` для вывода карточек.
+- [ ] Если добавить новый товар через форму, он **сразу** появляется на главной странице после обновления (F5).
+- [ ] **Навигация:**
+    - [ ] Если я **Гость**: вижу кнопки «Войти» и «Регистрация».
+    - [ ] Если я **Админ**: вижу кнопку «+ Добавить товар».
+    - [ ] Если я **Клиент**: вижу кнопку «Выйти», но НЕ вижу «+ Добавить товар».
+
+#### 4. Качество кода
+- [ ] В файлах `add_item.php` и `index.php` нет пароля от базы данных (используется `require 'db.php'`).
+- [ ] При выводе данных используется `htmlspecialchars()` (защита от поломки верстки).
+
+---
+**Вопрос для самопроверки:**
+*Если вы сейчас удалите товар вручную через phpMyAdmin, исчезнет ли он с главной страницы сайта?.*
